@@ -66,7 +66,7 @@ const DEFAULT_TARGETS = {
 };
 
 const DEFAULT_INCOME = { wife: 79079, husband: 54979 };
-const DEFAULT_PROFILE = { age: 29, netWorth: 1000000, efFund: 600000, japanFund: 400000 };
+const DEFAULT_PROFILE = { age: 29, netWorth: 1000000, efFund: 600000, japanFund: 400000, timeDeposit: 0, houseAndLotSaved: 0 };
 
 const CAT_COLORS = {
   Needs: C.cyan, Lifestyle: C.pink, Family: C.amber, Fixed: C.purple,
@@ -259,6 +259,35 @@ export default function App() {
 
   // ── FIX 4: Separate state for custom subcategory input ──────────────────
   const [customSub, setCustomSub] = useState("");
+
+  // ── Savings Goals (flexible tracker) ─────────────────
+  const GOAL_COLORS = ["#06b6d4","#10b981","#f59e0b","#8b5cf6","#f43f5e","#14b8a6","#6366f1","#ec4899","#f97316","#3b82f6"];
+  const GOAL_ICONS = ["🎯","✈️","🏠","🚗","💻","📱","💍","🎓","🛡️","🎉","🏋️","🌏","💰","🐾","🎸"];
+  // Goals only store target/color/icon — monthly & saved are derived from budget targets & expense log
+  const [savingsGoals, setSavingsGoals] = useState([
+    { id: 1, name: "Japan Trip", target: 200000, color: "#06b6d4", icon: "✈️" },
+    { id: 2, name: "Emergency Fund", target: 600000, color: "#10b981", icon: "🛡️" },
+  ]);
+  const [showGoalForm, setShowGoalForm] = useState(false);
+  const [editingGoal, setEditingGoal] = useState(null);
+  const [goalForm, setGoalForm] = useState({ name: "", target: "", icon: "🎯", color: "#06b6d4" });
+  const [hlGoalTarget, setHlGoalTarget] = useState(2250000);
+  const [hlGoalVisible, setHlGoalVisible] = useState(true);
+  const [hlEditingTarget, setHlEditingTarget] = useState(false);
+  const [hlTargetInput, setHlTargetInput] = useState("2250000");
+
+  // ── Sync: when a savings goal is added with no matching budget target, auto-create one ──
+  useEffect(() => {
+    savingsGoals.forEach(goal => {
+      if (!targets[goal.name]) {
+        const newEntry = { amount: 0, category: "Savings" };
+        setTargets(prev => ({ ...prev, [goal.name]: newEntry }));
+        if (sheetsConnected) {
+          sheetsApi.appendTarget({ name: goal.name, amount: 0, category: "Savings" });
+        }
+      }
+    });
+  }, [savingsGoals]);
 
   const INCOME = income.wife + income.husband;
 
@@ -458,6 +487,13 @@ export default function App() {
   }, [thisMonthExpenses]);
 
   const totalSpent = useMemo(() => thisMonthExpenses.reduce((s, e) => s + e.amount, 0), [thisMonthExpenses]);
+
+  // All-time savings logged across every month (all expenses where category === "Savings")
+  const allTimeSavingsLogged = useMemo(() => {
+    return expenses
+      .filter(e => e.category === "Savings" && e.type !== "Income")
+      .reduce((s, e) => s + e.amount, 0);
+  }, [expenses]);
 
   const totalBudgetSpending = useMemo(() => {
     return Object.entries(targets).reduce((s, [, v]) => {
@@ -828,6 +864,8 @@ export default function App() {
             { label: "Current Net Worth", id: "profile:netWorth", val: profile.netWorth },
             { label: "Emergency Fund", id: "profile:efFund", val: profile.efFund },
             { label: "Japan Fund", id: "profile:japanFund", val: profile.japanFund },
+            { label: "Time Deposit", id: "profile:timeDeposit", val: profile.timeDeposit || 0 },
+            { label: "House & Lot Saved", id: "profile:houseAndLotSaved", val: profile.houseAndLotSaved || 0 },
           ].map((row, i) => (
             <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${C.border}` }}>
               <span style={{ fontFamily: body, fontSize: 12, color: C.muted }}>{row.label}</span>
@@ -883,6 +921,35 @@ export default function App() {
             </div>
           </div>
         </Card>
+
+        {/* Savings Goals quick-edit in Budget */}
+        {savingsGoals.length > 0 && (
+          <Card style={{ gridColumn: "1 / -1", borderColor: C.cyan + "30" }}>
+            <Lbl icon="🎯">Savings Goals — Monthly Contributions</Lbl>
+            <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, marginBottom: 10 }}>
+              These are your active savings goals. The amount here flows directly into your Savings budget and sets the monthly on each goal card.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+              {savingsGoals.map(goal => {
+                const current = targets[goal.name];
+                const monthly = current?.amount || 0;
+                return (
+                  <div key={goal.id} style={{ padding: "10px 12px", background: C.cardAlt, borderRadius: 8, border: `1px solid ${goal.color}30` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: 16 }}>{goal.icon}</span>
+                      <span style={{ fontFamily: head, fontSize: 12, fontWeight: 700, color: C.text }}>{goal.name}</span>
+                    </div>
+                    <div style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", marginBottom: 4 }}>Monthly (₱)</div>
+                    <Editable id={`target:${goal.name}`} value={monthly} color={goal.color} fontSize={16} fontWeight={700} />
+                    {!current && (
+                      <div style={{ fontFamily: mono, fontSize: 7, color: C.amber, marginTop: 4 }}>No budget line yet — click amount to set one</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
 
         {/* Category cards with editable targets */}
         {categories.map(cat => {
@@ -1004,7 +1071,6 @@ export default function App() {
   );
 
   const renderGoals = () => {
-    // ── Spending stats ─────────────────────────────────
     const avgDailySpend = totalSpent / Math.max(dayOfMonth, 1);
     const projectedMonthEnd = avgDailySpend * daysInMonth;
     const biggestCat = Object.entries(spentByCategory).sort((a,b) => b[1]-a[1])[0];
@@ -1013,43 +1079,41 @@ export default function App() {
     const investTarget  = Object.entries(targets).filter(([,v]) => v.category === "Investment").reduce((s,[,v]) => s+v.amount, 0);
     const totalSavInvest = savingsTarget + investTarget;
     const savingsRate = INCOME > 0 ? ((totalSavInvest / INCOME) * 100).toFixed(1) : 0;
-
-    // ── Net worth trajectory (3-year monthly) ──────────
+    // Total bank balance = EF Fund + Japan Fund + all savings logged to date
+    const totalBankBalance = (profile.efFund || 0) + (profile.japanFund || 0) + allTimeSavingsLogged;
+    const hlMonthly = targets["House and Lot Funds"]?.amount || targets["SB House & Lot"]?.amount || 0;
+    const hlSaved = profile.houseAndLotSaved || 0;
+    const hlRemaining = Math.max(hlGoalTarget - hlSaved, 0);
+    const hlMonthsLeft = hlMonthly > 0 ? Math.ceil(hlRemaining / hlMonthly) : null;
+    const hlYrs = hlMonthsLeft ? Math.floor(hlMonthsLeft / 12) : null;
+    const hlMos = hlMonthsLeft ? hlMonthsLeft % 12 : null;
+    const hlPct = Math.min((hlSaved / hlGoalTarget) * 100, 100);
+    const hlETA = hlMonthsLeft != null ? (hlYrs > 0 ? `${hlYrs}y ${hlMos}m` : `${hlMos}m`) : "—";
+    const hlCompletionDate = (() => {
+      if (!hlMonthsLeft) return hlRemaining === 0 ? "Done! 🎉" : "—";
+      const d = new Date(); d.setMonth(d.getMonth() + hlMonthsLeft);
+      return d.toLocaleString("default", { month: "long", year: "numeric" });
+    })();
     const nwTrajectory = (() => {
-      const data = [];
-      let nw = profile.netWorth;
-      const monthlyGrowth = totalSavInvest * (1 + 0.05 / 12);
-      for (let m = 0; m <= 36; m++) {
-        const label = m % 6 === 0 ? `M${m}` : "";
-        data.push({ month: m, netWorth: Math.round(nw), label });
-        nw += monthlyGrowth;
-      }
+      const data = []; let nw = profile.netWorth;
+      const mg = totalSavInvest * (1 + 0.05 / 12);
+      for (let m = 0; m <= 36; m++) { data.push({ month: m, netWorth: Math.round(nw) }); nw += mg; }
       return data;
     })();
-
-    // ── Savings vs investment breakdown ───────────────
     const savInvestBreakdown = [
       ...Object.entries(targets).filter(([,v]) => v.category === "Savings").map(([k,v]) => ({ name: k, value: v.amount, color: C.green })),
       ...Object.entries(targets).filter(([,v]) => v.category === "Investment").map(([k,v]) => ({ name: k, value: v.amount, color: C.indigo })),
     ];
-
-    // ── Category budget utilisation ───────────────────
     const catUtil = Object.entries(CAT_COLORS).map(([cat, color]) => {
       const budgeted = Object.entries(targets).filter(([,v]) => v.category === cat).reduce((s,[,v]) => s+v.amount, 0);
       const spent = spentByCategory[cat] || 0;
       return { cat, budgeted, spent, color, pct: budgeted > 0 ? Math.min(((spent/budgeted)*100),100).toFixed(0) : 0 };
     }).filter(r => r.budgeted > 0);
-
-    // ── Top 5 subcategory spends ──────────────────────
-    const topSubs = Object.entries(spentBySubcategory)
-      .sort((a,b) => b[1]-a[1])
-      .slice(0, 5)
-      .map(([name, spent]) => ({ name, spent, budget: targets[name]?.amount || 0 }));
+    const topSubs = Object.entries(spentBySubcategory).sort((a,b) => b[1]-a[1]).slice(0,5).map(([name,spent]) => ({ name, spent, budget: targets[name]?.amount || 0 }));
 
     return (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
 
-        {/* ── Snapshot stats strip ── */}
         <Card style={{ gridColumn: "1 / -1" }}>
           <Lbl icon="📊">This Month at a Glance</Lbl>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
@@ -1063,7 +1127,121 @@ export default function App() {
           </div>
         </Card>
 
-        {/* ── Net worth trajectory ── */}
+        <Card style={{ gridColumn: "1 / -1", borderColor: C.teal + "40" }}>
+          <Lbl icon="🏦">Total Bank Balance</Lbl>
+          <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Emergency Fund</div>
+              <div style={{ fontFamily: head, fontSize: 22, fontWeight: 700, color: C.green }}>{fmt(profile.efFund || 0)}</div>
+            </div>
+            <div style={{ fontFamily: head, fontSize: 20, color: C.dim, paddingBottom: 2 }}>+</div>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Japan Fund</div>
+              <div style={{ fontFamily: head, fontSize: 22, fontWeight: 700, color: C.cyan }}>{fmt(profile.japanFund || 0)}</div>
+            </div>
+            <div style={{ fontFamily: head, fontSize: 20, color: C.dim, paddingBottom: 2 }}>+</div>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Savings Logged</div>
+              <div style={{ fontFamily: head, fontSize: 22, fontWeight: 700, color: C.teal }}>{fmt(allTimeSavingsLogged)}</div>
+              <div style={{ fontFamily: mono, fontSize: 7, color: C.dim, marginTop: 2 }}>all-time from log</div>
+            </div>
+            <div style={{ fontFamily: head, fontSize: 20, color: C.dim, paddingBottom: 2 }}>=</div>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Total Bank Balance</div>
+              <div style={{ fontFamily: head, fontSize: 28, fontWeight: 800, color: C.text }}>{fmt(totalBankBalance)}</div>
+            </div>
+            <div style={{ marginLeft: "auto", textAlign: "right" }}>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>As % of net worth</div>
+              <div style={{ fontFamily: head, fontSize: 18, fontWeight: 700, color: C.muted }}>{profile.netWorth > 0 ? ((totalBankBalance/profile.netWorth)*100).toFixed(1) : 0}%</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, height: 6, background: C.border, borderRadius: 3, overflow: "hidden", display: "flex" }}>
+            <div style={{ flex: profile.efFund || 0, background: C.green }} />
+            <div style={{ flex: profile.japanFund || 0, background: C.cyan }} />
+            <div style={{ flex: allTimeSavingsLogged || 0, background: C.teal }} />
+          </div>
+          <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.green} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Emergency Fund</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.cyan} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Japan Fund</span></div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.teal} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Savings Logged</span></div>
+          </div>
+        </Card>
+
+{hlGoalVisible && (
+        <Card style={{ gridColumn: "1 / -1", borderColor: C.amber + "40" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ fontSize: 14 }}>🏠</span>
+              <span style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted }}>House & Lot Fund</span>
+            </div>
+            <button onClick={() => setHlGoalVisible(false)}
+              style={{ padding: "3px 10px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 5, color: C.dim, fontFamily: mono, fontSize: 9, cursor: "pointer" }}>Remove</button>
+          </div>
+
+          {/* Editable target */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <span style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Target</span>
+            {hlEditingTarget ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontFamily: mono, fontSize: 11, color: C.dim }}>₱</span>
+                <input
+                  type="number"
+                  value={hlTargetInput}
+                  onChange={e => setHlTargetInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") { const v = parseFloat(hlTargetInput); if (!isNaN(v) && v > 0) setHlGoalTarget(v); setHlEditingTarget(false); }
+                    if (e.key === "Escape") setHlEditingTarget(false);
+                  }}
+                  onBlur={() => { const v = parseFloat(hlTargetInput); if (!isNaN(v) && v > 0) setHlGoalTarget(v); setHlEditingTarget(false); }}
+                  autoFocus
+                  style={{ width: 140, padding: "4px 8px", background: C.cardAlt, border: `1px solid ${C.cyan}`, borderRadius: 5, color: C.text, fontFamily: mono, fontSize: 14, fontWeight: 700, outline: "none" }}
+                />
+              </div>
+            ) : (
+              <span
+                onClick={() => { setHlTargetInput(String(hlGoalTarget)); setHlEditingTarget(true); }}
+                title="Click to edit target"
+                style={{ fontFamily: mono, fontSize: 16, fontWeight: 800, color: C.amber, cursor: "pointer", borderBottom: `1px dashed ${C.amber}50`, padding: "1px 3px" }}
+              >
+                {fmt(hlGoalTarget)}
+              </span>
+            )}
+          </div>
+
+          {/* Progress */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase" }}>Saved so far</div>
+              <div style={{ fontFamily: head, fontSize: 28, fontWeight: 800, color: C.amber }}>{fmt(hlSaved)}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase" }}>Remaining</div>
+              <div style={{ fontFamily: head, fontSize: 20, fontWeight: 700, color: C.text }}>{fmt(hlRemaining)}</div>
+            </div>
+          </div>
+          <div style={{ height: 10, background: C.border, borderRadius: 5, overflow: "hidden", marginBottom: 6 }}>
+            <div style={{ height: "100%", width: `${hlPct}%`, background: `linear-gradient(90deg, ${C.amber}, ${C.orange})`, borderRadius: 5, transition: "width 0.5s ease" }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
+            <span style={{ fontFamily: mono, fontSize: 9, color: C.amber, fontWeight: 600 }}>{hlPct.toFixed(1)}% complete</span>
+            <span style={{ fontFamily: mono, fontSize: 9, color: C.dim }}>{fmt(hlGoalTarget)} goal</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+            {[
+              { label: "Monthly contrib.", value: fmt(hlMonthly), color: C.green },
+              { label: "ETA", value: hlETA, color: C.cyan },
+              { label: "Est. completion", value: hlCompletionDate, color: C.text },
+              { label: "% complete", value: `${hlPct.toFixed(1)}%`, color: C.amber },
+            ].map((s, i) => (
+              <div key={i} style={{ padding: "8px 12px", background: C.cardAlt, borderRadius: 8 }}>
+                <div style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>{s.label}</div>
+                <div style={{ fontFamily: mono, fontSize: 12, color: s.color, fontWeight: 700 }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+        )}
+
         <Card style={{ gridColumn: "1 / -1" }}>
           <Lbl icon="📈">Net Worth Trajectory — 3 Years</Lbl>
           <div style={{ width: "100%", height: 240 }}>
@@ -1076,18 +1254,12 @@ export default function App() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                <XAxis dataKey="month" tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }}
-                  tickFormatter={v => v % 6 === 0 ? `M${v}` : ""}
-                  axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }}
-                  tickFormatter={v => `₱${(v/1000000).toFixed(1)}M`}
-                  axisLine={false} tickLine={false} />
+                <XAxis dataKey="month" tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }} tickFormatter={v => v % 6 === 0 ? `M${v}` : ""} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }} tickFormatter={v => `₱${(v/1000000).toFixed(1)}M`} axisLine={false} tickLine={false} />
                 <Tooltip content={<TT />} />
-                <Area type="monotone" dataKey="netWorth" name="Net Worth"
-                  stroke={C.cyan} fill="url(#gNwGoals)" strokeWidth={2.5} />
+                <Area type="monotone" dataKey="netWorth" name="Net Worth" stroke={C.cyan} fill="url(#gNwGoals)" strokeWidth={2.5} />
                 {[2000000, 5000000, 10000000].map(milestone => (
-                  <ReferenceLine key={milestone} y={milestone}
-                    stroke={C.amber + "60"} strokeDasharray="4 4"
+                  <ReferenceLine key={milestone} y={milestone} stroke={C.amber + "60"} strokeDasharray="4 4"
                     label={{ value: `₱${milestone/1000000}M`, fill: C.amber, fontSize: 7, fontFamily: mono, position: "insideTopRight" }} />
                 ))}
               </AreaChart>
@@ -1101,18 +1273,13 @@ export default function App() {
           </div>
         </Card>
 
-        {/* ── Savings & investment breakdown ── */}
         <Card>
-          <Lbl icon="🏦">Savings & Investment Breakdown</Lbl>
+          <Lbl icon="💰">Savings & Investment Breakdown</Lbl>
           <div style={{ width: "100%", height: 200 }}>
             <ResponsiveContainer>
               <PieChart>
-                <Pie data={savInvestBreakdown} cx="50%" cy="50%"
-                  innerRadius={50} outerRadius={80} paddingAngle={2}
-                  dataKey="value" stroke="none">
-                  {savInvestBreakdown.map((entry, i) => (
-                    <Cell key={i} fill={entry.color + (entry.color === C.green ? "cc" : "99")} />
-                  ))}
+                <Pie data={savInvestBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" stroke="none">
+                  {savInvestBreakdown.map((entry, i) => (<Cell key={i} fill={entry.color + (entry.color === C.green ? "cc" : "99")} />))}
                 </Pie>
                 <Tooltip content={<TT />} />
               </PieChart>
@@ -1121,10 +1288,7 @@ export default function App() {
           <div style={{ marginTop: 4 }}>
             {savInvestBreakdown.map((item, i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: `1px solid ${C.border}` }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <Dot color={item.color} />
-                  <span style={{ fontFamily: body, fontSize: 11, color: C.text }}>{item.name}</span>
-                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}><Dot color={item.color} /><span style={{ fontFamily: body, fontSize: 11, color: C.text }}>{item.name}</span></div>
                 <span style={{ fontFamily: mono, fontSize: 11, color: item.color, fontWeight: 600 }}>{fmt(item.value)}</span>
               </div>
             ))}
@@ -1141,41 +1305,28 @@ export default function App() {
           </div>
         </Card>
 
-        {/* ── Budget utilisation by category ── */}
         <Card>
           <Lbl icon="🎯">Budget Utilisation by Category</Lbl>
           {catUtil.map((row, i) => (
             <div key={i} style={{ marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <Dot color={row.color} />
-                  <span style={{ fontFamily: body, fontSize: 11, color: C.text }}>{row.cat}</span>
-                </div>
-                <span style={{ fontFamily: mono, fontSize: 10, color: Number(row.pct) >= 90 ? C.rose : C.muted }}>
-                  {fmt(row.spent)} <span style={{ color: C.dim }}>/ {fmt(row.budgeted)}</span>
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}><Dot color={row.color} /><span style={{ fontFamily: body, fontSize: 11, color: C.text }}>{row.cat}</span></div>
+                <span style={{ fontFamily: mono, fontSize: 10, color: Number(row.pct) >= 90 ? C.rose : C.muted }}>{fmt(row.spent)} <span style={{ color: C.dim }}>/ {fmt(row.budgeted)}</span></span>
               </div>
               <div style={{ height: 5, background: C.border, borderRadius: 3, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%",
-                  width: `${row.pct}%`,
-                  background: Number(row.pct) >= 100 ? C.rose : Number(row.pct) >= 80 ? C.amber : row.color,
-                  borderRadius: 3,
-                  transition: "width 0.4s ease"
-                }} />
+                <div style={{ height: "100%", width: `${row.pct}%`, background: Number(row.pct) >= 100 ? C.rose : Number(row.pct) >= 80 ? C.amber : row.color, borderRadius: 3, transition: "width 0.4s ease" }} />
               </div>
             </div>
           ))}
         </Card>
 
-        {/* ── Top spends this month ── */}
         <Card>
           <Lbl icon="🏆">Top Spends This Month</Lbl>
           {topSubs.length === 0 ? (
             <div style={{ fontFamily: body, fontSize: 12, color: C.dim, textAlign: "center", padding: 20 }}>No expenses logged yet</div>
           ) : topSubs.map((item, i) => {
             const over = item.budget > 0 && item.spent > item.budget;
-            const p = item.budget > 0 ? Math.min((item.spent / item.budget) * 100, 100) : 100;
+            const p = item.budget > 0 ? Math.min((item.spent/item.budget)*100, 100) : 100;
             return (
               <div key={i} style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
@@ -1198,32 +1349,18 @@ export default function App() {
           })}
         </Card>
 
-        {/* ── Spending insight card ── */}
         <Card style={{ gridColumn: "1 / -1", borderColor: C.cyan + "20" }}>
           <Lbl icon="💡">Monthly Insights</Lbl>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
             {[
-              {
-                label: "Spending pace",
-                color: projectedMonthEnd > totalBudgetSpending ? C.rose : C.green,
-                text: projectedMonthEnd > totalBudgetSpending
-                  ? `At this rate you'll exceed your budget by ${fmt(projectedMonthEnd - totalBudgetSpending)} by month-end.`
-                  : `You're on track to finish ${fmt(totalBudgetSpending - projectedMonthEnd)} under budget. 🎉`
-              },
-              {
-                label: "Savings rate",
-                color: Number(savingsRate) >= 30 ? C.green : Number(savingsRate) >= 20 ? C.amber : C.rose,
-                text: Number(savingsRate) >= 30
-                  ? `${savingsRate}% savings rate — excellent. You're building wealth fast.`
-                  : Number(savingsRate) >= 20
-                  ? `${savingsRate}% savings rate — solid, but room to grow.`
-                  : `${savingsRate}% savings rate — consider trimming discretionary spend.`
-              },
-              {
-                label: "Net worth growth",
-                color: C.cyan,
-                text: `At current pace your net worth reaches ${fmt(nwTrajectory[12]?.netWorth || 0)} in 12 months — a ${fmt((nwTrajectory[12]?.netWorth || 0) - profile.netWorth)} increase.`
-              },
+              { label: "Spending pace", color: projectedMonthEnd > totalBudgetSpending ? C.rose : C.green,
+                text: projectedMonthEnd > totalBudgetSpending ? `At this rate you'll exceed your budget by ${fmt(projectedMonthEnd - totalBudgetSpending)} by month-end.` : `You're on track to finish ${fmt(totalBudgetSpending - projectedMonthEnd)} under budget. 🎉` },
+              { label: "Savings rate", color: Number(savingsRate) >= 30 ? C.green : Number(savingsRate) >= 20 ? C.amber : C.rose,
+                text: Number(savingsRate) >= 30 ? `${savingsRate}% savings rate — excellent. You're building wealth fast.` : Number(savingsRate) >= 20 ? `${savingsRate}% savings rate — solid, but room to grow.` : `${savingsRate}% savings rate — consider trimming discretionary spend.` },
+              { label: "Net worth growth", color: C.cyan,
+                text: `At current pace your net worth reaches ${fmt(nwTrajectory[12]?.netWorth || 0)} in 12 months — a ${fmt((nwTrajectory[12]?.netWorth || 0) - profile.netWorth)} increase.` },
+              { label: "House & lot", color: C.amber,
+                text: hlRemaining > 0 ? `${hlPct.toFixed(1)}% of house & lot fund saved. At ${fmt(hlMonthly)}/mo, target reached by ${hlCompletionDate}.` : `House & lot fund goal reached! 🎉` },
             ].map((ins, i) => (
               <div key={i} style={{ padding: "10px 14px", background: ins.color + "10", borderRadius: 8, border: `1px solid ${ins.color}20` }}>
                 <div style={{ fontFamily: mono, fontSize: 8, color: ins.color, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5 }}>{ins.label}</div>
@@ -1231,6 +1368,167 @@ export default function App() {
               </div>
             ))}
           </div>
+        </Card>
+
+        {/* ── Savings Goals Tracker ── */}
+        <Card style={{ gridColumn: "1 / -1" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ fontSize: 14 }}>🎯</span>
+              <span style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted }}>Savings Goals</span>
+            </div>
+            <button
+              onClick={() => { setEditingGoal(null); setGoalForm({ name: "", target: "", saved: "", monthly: "", icon: "🎯", color: GOAL_COLORS[0] }); setShowGoalForm(true); }}
+              style={{ padding: "5px 12px", background: `linear-gradient(135deg, ${C.cyan}, ${C.teal})`, border: "none", borderRadius: 6, color: "#000", fontFamily: mono, fontSize: 9, fontWeight: 700, cursor: "pointer", letterSpacing: "0.05em" }}
+            >+ Add Goal</button>
+          </div>
+
+          {/* Add / Edit form */}
+          {showGoalForm && (
+            <div style={{ background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.cyan, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                {editingGoal ? "Edit Goal" : "New Goal"}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 10 }}>
+                <div>
+                  <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Name</label>
+                  <input value={goalForm.name} onChange={e => setGoalForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. New Laptop"
+                    style={{ width: "100%", padding: "7px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", marginTop: 3 }} />
+                </div>
+                <div>
+                  <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Target (₱)</label>
+                  <input type="number" value={goalForm.target} onChange={e => setGoalForm(p => ({ ...p, target: e.target.value }))} placeholder="0"
+                    style={{ width: "100%", padding: "7px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", marginTop: 3 }} />
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-end" }}>
+                  <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, padding: "8px 0", lineHeight: 1.5 }}>
+                    Monthly contribution &amp; progress are pulled live from your Budget targets and expense log. Set the monthly amount in the <span style={{ color: C.cyan }}>Budget tab → Savings</span> under this goal's name.
+                  </div>
+                </div>
+              </div>
+              {/* Icon picker */}
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Icon</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+                  {GOAL_ICONS.map(ic => (
+                    <button key={ic} onClick={() => setGoalForm(p => ({ ...p, icon: ic }))}
+                      style={{ width: 30, height: 30, background: goalForm.icon === ic ? C.cyan + "30" : C.card, border: `1px solid ${goalForm.icon === ic ? C.cyan : C.border}`, borderRadius: 6, cursor: "pointer", fontSize: 14 }}>
+                      {ic}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Color picker */}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Color</label>
+                <div style={{ display: "flex", gap: 6, marginTop: 5 }}>
+                  {GOAL_COLORS.map(col => (
+                    <button key={col} onClick={() => setGoalForm(p => ({ ...p, color: col }))}
+                      style={{ width: 22, height: 22, background: col, borderRadius: "50%", border: goalForm.color === col ? `2px solid ${C.text}` : `2px solid transparent`, cursor: "pointer" }} />
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => {
+                  if (!goalForm.name || !goalForm.target) return;
+                  if (editingGoal) {
+                    setSavingsGoals(prev => prev.map(g => g.id === editingGoal
+                      ? { ...g, name: goalForm.name, target: parseFloat(goalForm.target), icon: goalForm.icon, color: goalForm.color }
+                      : g));
+                  } else {
+                    setSavingsGoals(prev => [...prev, { id: Date.now(), name: goalForm.name, target: parseFloat(goalForm.target), icon: goalForm.icon, color: goalForm.color }]);
+                  }
+                  setShowGoalForm(false); setEditingGoal(null);
+                }} style={{ padding: "7px 16px", background: `linear-gradient(135deg, ${C.cyan}, ${C.teal})`, border: "none", borderRadius: 6, color: "#000", fontFamily: mono, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                  {editingGoal ? "Save Changes" : "Add Goal"}
+                </button>
+                <button onClick={() => { setShowGoalForm(false); setEditingGoal(null); }}
+                  style={{ padding: "7px 16px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, color: C.dim, fontFamily: mono, fontSize: 10, cursor: "pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Goals grid */}
+          {savingsGoals.length === 0 ? (
+            <div style={{ fontFamily: body, fontSize: 13, color: C.dim, textAlign: "center", padding: "24px 0" }}>No goals yet — add one above 🎯</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+              {savingsGoals.map(goal => {
+                // ── Derive monthly from matching budget target ──
+                const monthly = targets[goal.name]?.amount || 0;
+                // ── Derive saved from all-time logged expenses where subcategory === goal name ──
+                const saved = expenses
+                  .filter(e => e.subcategory === goal.name && e.type !== "Income")
+                  .reduce((s, e) => s + e.amount, 0);
+                const remaining = Math.max(goal.target - saved, 0);
+                const pctDone = Math.min(goal.target > 0 ? (saved / goal.target) * 100 : 0, 100);
+                const monthsLeft = monthly > 0 ? Math.ceil(remaining / monthly) : null;
+                const yrs = monthsLeft ? Math.floor(monthsLeft / 12) : null;
+                const mos = monthsLeft ? monthsLeft % 12 : null;
+                const eta = monthsLeft != null ? (yrs > 0 ? `${yrs}y ${mos}m` : `${mos}m`) : "—";
+                const completionDate = (() => {
+                  if (!monthsLeft) return remaining === 0 ? "Done! 🎉" : "—";
+                  const d = new Date(); d.setMonth(d.getMonth() + monthsLeft);
+                  return d.toLocaleString("default", { month: "short", year: "numeric" });
+                })();
+                const hasBudgetLine = !!targets[goal.name];
+                return (
+                  <div key={goal.id} style={{ padding: "14px 16px", background: C.cardAlt, borderRadius: 10, border: `1px solid ${goal.color}30`, position: "relative" }}>
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 20 }}>{goal.icon}</span>
+                        <div>
+                          <div style={{ fontFamily: head, fontSize: 14, fontWeight: 700, color: C.text }}>{goal.name}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <div style={{ fontFamily: mono, fontSize: 9, color: C.dim }}>{fmt(goal.target)} goal</div>
+                            {hasBudgetLine
+                              ? <span style={{ fontFamily: mono, fontSize: 7, color: C.green, background: C.green + "20", padding: "1px 5px", borderRadius: 3 }}>● budget linked</span>
+                              : <span style={{ fontFamily: mono, fontSize: 7, color: C.amber, background: C.amber + "20", padding: "1px 5px", borderRadius: 3 }}>○ set monthly in Budget tab</span>
+                            }
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={() => { setEditingGoal(goal.id); setGoalForm({ name: goal.name, target: String(goal.target), icon: goal.icon, color: goal.color }); setShowGoalForm(true); }}
+                          style={{ padding: "3px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.dim, fontFamily: mono, fontSize: 9, cursor: "pointer" }}>Edit</button>
+                        <button onClick={() => setSavingsGoals(prev => prev.filter(g => g.id !== goal.id))}
+                          style={{ padding: "3px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.dim, fontFamily: mono, fontSize: 9, cursor: "pointer" }}>✕</button>
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    <div style={{ height: 8, background: C.border, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
+                      <div style={{ height: "100%", width: `${pctDone}%`, background: `linear-gradient(90deg, ${goal.color}99, ${goal.color})`, borderRadius: 4, transition: "width 0.5s ease" }} />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                      <span style={{ fontFamily: mono, fontSize: 9, color: goal.color, fontWeight: 600 }}>{pctDone.toFixed(1)}%</span>
+                      <span style={{ fontFamily: mono, fontSize: 9, color: C.dim }}>{fmt(remaining)} left</span>
+                    </div>
+                    {/* Stats */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                      {[
+                        { label: "Saved (logged)", value: fmt(saved), color: goal.color },
+                        { label: "Monthly (budget)", value: monthly > 0 ? fmt(monthly) : "—", color: C.green },
+                        { label: "ETA", value: eta, color: C.text },
+                      ].map((s, i) => (
+                        <div key={i} style={{ padding: "6px 8px", background: C.card, borderRadius: 6, textAlign: "center" }}>
+                          <div style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", marginBottom: 2 }}>{s.label}</div>
+                          <div style={{ fontFamily: mono, fontSize: 10, color: s.color, fontWeight: 700 }}>{s.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {completionDate !== "—" && (
+                      <div style={{ marginTop: 8, fontFamily: mono, fontSize: 8, color: C.dim, textAlign: "center" }}>
+                        {remaining === 0 ? <span style={{ color: goal.color, fontWeight: 700 }}>Goal reached! 🎉</span> : <>Est. completion: <span style={{ color: goal.color, fontWeight: 600 }}>{completionDate}</span></>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
 
       </div>
@@ -1245,7 +1543,7 @@ export default function App() {
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <h1 style={{ fontFamily: head, fontSize: 22, fontWeight: 800, margin: 0, color: C.text }}>
-              <span style={{ color: C.cyan }}>₱</span> Kaori and Youhei Funds
+              <span style={{ color: C.cyan }}>₱</span> Command Center
             </h1>
             <span style={{ fontFamily: mono, fontSize: 8, color: C.dim, background: C.cyanDim, padding: "2px 6px", borderRadius: 4 }}>v7 LIVE</span>
           </div>
