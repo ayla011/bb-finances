@@ -198,7 +198,7 @@ const sheetsApi = {
 };
 
 // ── MAIN APP ──────────────────────────────────────────
-const TABS = ["Dashboard", "Log", "Budget", "Analytics", "FIRE"];
+const TABS = ["Dashboard", "Log", "Budget", "Analytics", "Goals"];
 
 export default function App() {
   const [tab, setTab] = useState("Dashboard");
@@ -534,28 +534,6 @@ export default function App() {
     return data;
   }, [targets, profile.netWorth]);
 
-  const fireData = useMemo(() => {
-    const annualExpenses = totalBudgetSpending * 12;
-    const fireNumber = annualExpenses * 25;
-    const leanFire = annualExpenses * 0.7 * 25;
-    const monthlySavings = Object.entries(targets).filter(([,v]) => v.category === "Savings").reduce((s,[,v]) => s + v.amount, 0);
-    const monthlyInvest = Object.entries(targets).filter(([,v]) => v.category === "Investment").reduce((s,[,v]) => s + v.amount, 0);
-    const monthlySavInvest = monthlySavings + monthlyInvest;
-    const annualSavInvest = monthlySavInvest * 12;
-    const currentNetWorth = profile.netWorth;
-    const realReturn = 0.05;
-    const data = [];
-    let nw = currentNetWorth;
-    let fireYear = null;
-    let leanFireYear = null;
-    for (let y = 0; y <= 35; y++) {
-      data.push({ year: y, age: profile.age + y, netWorth: Math.round(nw), fire: fireNumber, leanFire: leanFire });
-      if (!fireYear && nw >= fireNumber) fireYear = y;
-      if (!leanFireYear && nw >= leanFire) leanFireYear = y;
-      nw = nw * (1 + realReturn) + annualSavInvest;
-    }
-    return { data, fireNumber, leanFire, fireYear, leanFireYear, annualExpenses, monthlySavInvest };
-  }, [totalBudgetSpending, targets, profile]);
 
   // ── FIX 5: handleLog resets form after submission ────────────────────────
   // ── FIX 4: resolves actual subcategory from customSub when "__custom" ────
@@ -865,15 +843,44 @@ export default function App() {
         {/* Add new subcategory */}
         <Card>
           <Lbl icon="➕">Add Category / Subcategory</Lbl>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input placeholder="Name (e.g. Snacks)" value={newName} onChange={e => setNewName(e.target.value)} style={{ padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none" }} />
-            <input placeholder="Amount" type="number" value={newAmount} onChange={e => setNewAmount(e.target.value)} style={{ padding: "8px 10px", width: 120, background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none" }} />
-            <select value={newCategory} onChange={e => setNewCategory(e.target.value)} style={{ padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none" }}>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <button onClick={addNewSubcategory} style={{ padding: "8px 12px", background: `linear-gradient(135deg, ${C.green}, ${C.teal})`, border: "none", borderRadius: 6, color: "#000", fontFamily: mono, fontSize: 12, cursor: "pointer" }}>
-              Add
-            </button>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <label style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Name</label>
+              <input
+                placeholder="e.g. Snacks"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                style={{ padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", width: "100%" }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <label style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Amount</label>
+              <input
+                placeholder="0"
+                type="number"
+                value={newAmount}
+                onChange={e => setNewAmount(e.target.value)}
+                style={{ padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", width: "100%" }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <label style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Category</label>
+              <select
+                value={newCategory}
+                onChange={e => setNewCategory(e.target.value)}
+                style={{ padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", width: "100%" }}
+              >
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "flex-end" }}>
+              <button
+                onClick={addNewSubcategory}
+                style={{ width: "100%", padding: "8px 12px", background: `linear-gradient(135deg, ${C.green}, ${C.teal})`, border: "none", borderRadius: 6, color: "#000", fontFamily: mono, fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                Add
+              </button>
+            </div>
           </div>
         </Card>
 
@@ -996,89 +1003,239 @@ export default function App() {
     </div>
   );
 
-  const renderFire = () => (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
-      <Card style={{ gridColumn: "1 / -1" }}>
-        <Lbl icon="🔥">FIRE Projection</Lbl>
-        <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 16 }}>
-          <Num label="Annual Expenses" value={fmt(fireData.annualExpenses)} color={C.cyan} />
-          <Num label="FIRE Number (25×)" value={fmt(fireData.fireNumber)} color={C.amber} />
-          <Num label="Lean FIRE (17.5×)" value={fmt(fireData.leanFire)} color={C.teal} />
-          <Num label="Lean FIRE Age" value={fireData.leanFireYear ? `${profile.age + fireData.leanFireYear}` : "—"} color={C.green} />
-          <Num label="Full FIRE Age" value={fireData.fireYear ? `${profile.age + fireData.fireYear}` : "—"} color={C.amber} />
-        </div>
-        <div style={{ width: "100%", height: 300 }}>
-          <ResponsiveContainer>
-            <AreaChart data={fireData.data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gNw" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.cyan} stopOpacity={0.2} /><stop offset="100%" stopColor={C.cyan} stopOpacity={0} /></linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-              <XAxis dataKey="age" tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }} axisLine={false} tickLine={false} label={{ value: "Age", position: "insideBottomRight", fill: C.dim, fontSize: 8, fontFamily: mono }} />
-              <YAxis tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }} tickFormatter={v => `₱${(v/1000000).toFixed(0)}M`} axisLine={false} tickLine={false} />
-              <Tooltip content={<TT />} />
-              <Area type="monotone" dataKey="netWorth" name="Net Worth" stroke={C.cyan} fill="url(#gNw)" strokeWidth={2.5} />
-              <Line type="monotone" dataKey="fire" name="FIRE Target" stroke={C.amber} strokeDasharray="6 3" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="leanFire" name="Lean FIRE" stroke={C.teal} strokeDasharray="4 4" strokeWidth={1.5} dot={false} />
-              <Legend wrapperStyle={{ fontFamily: mono, fontSize: 8, color: C.dim }} iconType="line" iconSize={10} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
+  const renderGoals = () => {
+    // ── Spending stats ─────────────────────────────────
+    const avgDailySpend = totalSpent / Math.max(dayOfMonth, 1);
+    const projectedMonthEnd = avgDailySpend * daysInMonth;
+    const biggestCat = Object.entries(spentByCategory).sort((a,b) => b[1]-a[1])[0];
+    const biggestSub = Object.entries(spentBySubcategory).sort((a,b) => b[1]-a[1])[0];
+    const savingsTarget = Object.entries(targets).filter(([,v]) => v.category === "Savings").reduce((s,[,v]) => s+v.amount, 0);
+    const investTarget  = Object.entries(targets).filter(([,v]) => v.category === "Investment").reduce((s,[,v]) => s+v.amount, 0);
+    const totalSavInvest = savingsTarget + investTarget;
+    const savingsRate = INCOME > 0 ? ((totalSavInvest / INCOME) * 100).toFixed(1) : 0;
 
-      <Card>
-        <Lbl icon="📐">FIRE Assumptions (edit in Budget tab)</Lbl>
-        {[
-          { l: "Current Age", v: `${profile.age}` },
-          { l: "Monthly Savings + Invest", v: fmt(fireData.monthlySavInvest) },
-          { l: "Current Net Worth", v: fmt(profile.netWorth) },
-          { l: "Real Return (after inflation)", v: "5.0% p.a." },
-          { l: "Safe Withdrawal Rate", v: "4% (standard FIRE)" },
-          { l: "Lean FIRE multiplier", v: "17.5× (70% expenses)" },
-          { l: "Monthly Spending", v: fmt(totalBudgetSpending) },
-        ].map((r, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: `1px solid ${C.border}` }}>
-            <span style={{ fontFamily: body, fontSize: 11, color: C.muted }}>{r.l}</span>
-            <span style={{ fontFamily: mono, fontSize: 11, color: C.text, fontWeight: 600 }}>{r.v}</span>
-          </div>
-        ))}
-        <div style={{ marginTop: 12, padding: "10px 12px", background: C.greenDim, borderRadius: 8 }}>
-          <div style={{ fontFamily: mono, fontSize: 8, color: C.green, fontWeight: 600, letterSpacing: "0.1em" }}>KEY INSIGHT</div>
-          <div style={{ fontFamily: body, fontSize: 11, color: C.muted, marginTop: 4 }}>
-            {fireData.leanFireYear ? `At current rates, you could reach Lean FIRE by age ${profile.age + fireData.leanFireYear}. ` : ""}
-            {fireData.fireYear ? `Full FIRE by age ${profile.age + fireData.fireYear}. ` : ""}
-            Every ₱1,000/mo increase in savings shaves ~1–2 years off your FIRE date.
-          </div>
-        </div>
-      </Card>
+    // ── Net worth trajectory (3-year monthly) ──────────
+    const nwTrajectory = (() => {
+      const data = [];
+      let nw = profile.netWorth;
+      const monthlyGrowth = totalSavInvest * (1 + 0.05 / 12);
+      for (let m = 0; m <= 36; m++) {
+        const label = m % 6 === 0 ? `M${m}` : "";
+        data.push({ month: m, netWorth: Math.round(nw), label });
+        nw += monthlyGrowth;
+      }
+      return data;
+    })();
 
-      <Card>
-        <Lbl icon="🎯">Milestones</Lbl>
-        {[
-          { label: "₱2M Net Worth", target: 2000000 },
-          { label: "₱5M Net Worth", target: 5000000 },
-          { label: "₱10M Net Worth", target: 10000000 },
-          { label: "Lean FIRE", target: fireData.leanFire },
-          { label: "Full FIRE", target: fireData.fireNumber },
-        ].map((m, i) => {
-          const yearHit = fireData.data.find(d => d.netWorth >= m.target);
-          return (
-            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < 4 ? `1px solid ${C.border}` : "none" }}>
-              <div>
-                <div style={{ fontFamily: body, fontSize: 12, color: C.text }}>{m.label}</div>
-                <div style={{ fontFamily: mono, fontSize: 9, color: C.dim }}>{fmt(m.target)}</div>
+    // ── Savings vs investment breakdown ───────────────
+    const savInvestBreakdown = [
+      ...Object.entries(targets).filter(([,v]) => v.category === "Savings").map(([k,v]) => ({ name: k, value: v.amount, color: C.green })),
+      ...Object.entries(targets).filter(([,v]) => v.category === "Investment").map(([k,v]) => ({ name: k, value: v.amount, color: C.indigo })),
+    ];
+
+    // ── Category budget utilisation ───────────────────
+    const catUtil = Object.entries(CAT_COLORS).map(([cat, color]) => {
+      const budgeted = Object.entries(targets).filter(([,v]) => v.category === cat).reduce((s,[,v]) => s+v.amount, 0);
+      const spent = spentByCategory[cat] || 0;
+      return { cat, budgeted, spent, color, pct: budgeted > 0 ? Math.min(((spent/budgeted)*100),100).toFixed(0) : 0 };
+    }).filter(r => r.budgeted > 0);
+
+    // ── Top 5 subcategory spends ──────────────────────
+    const topSubs = Object.entries(spentBySubcategory)
+      .sort((a,b) => b[1]-a[1])
+      .slice(0, 5)
+      .map(([name, spent]) => ({ name, spent, budget: targets[name]?.amount || 0 }));
+
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
+
+        {/* ── Snapshot stats strip ── */}
+        <Card style={{ gridColumn: "1 / -1" }}>
+          <Lbl icon="📊">This Month at a Glance</Lbl>
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <Num label="Total Spent" value={fmt(totalSpent)} color={C.cyan} />
+            <Num label="Daily Average" value={fmt(avgDailySpend)} color={C.text} />
+            <Num label="Projected Month-End" value={fmt(projectedMonthEnd)} color={projectedMonthEnd > totalBudgetSpending ? C.rose : C.green} />
+            <Num label="Savings Rate" value={`${savingsRate}%`} color={C.green} />
+            <Num label="Monthly Saved + Invested" value={fmt(totalSavInvest)} color={C.indigo} />
+            {biggestCat && <Num label="Top Category" value={biggestCat[0]} sub={fmt(biggestCat[1])} color={CAT_COLORS[biggestCat[0]]} />}
+            {biggestSub && <Num label="Top Line Item" value={biggestSub[0]} sub={fmt(biggestSub[1])} color={C.amber} />}
+          </div>
+        </Card>
+
+        {/* ── Net worth trajectory ── */}
+        <Card style={{ gridColumn: "1 / -1" }}>
+          <Lbl icon="📈">Net Worth Trajectory — 3 Years</Lbl>
+          <div style={{ width: "100%", height: 240 }}>
+            <ResponsiveContainer>
+              <AreaChart data={nwTrajectory} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gNwGoals" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={C.cyan} stopOpacity={0.25} />
+                    <stop offset="100%" stopColor={C.cyan} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                <XAxis dataKey="month" tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }}
+                  tickFormatter={v => v % 6 === 0 ? `M${v}` : ""}
+                  axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: C.dim, fontSize: 8, fontFamily: mono }}
+                  tickFormatter={v => `₱${(v/1000000).toFixed(1)}M`}
+                  axisLine={false} tickLine={false} />
+                <Tooltip content={<TT />} />
+                <Area type="monotone" dataKey="netWorth" name="Net Worth"
+                  stroke={C.cyan} fill="url(#gNwGoals)" strokeWidth={2.5} />
+                {[2000000, 5000000, 10000000].map(milestone => (
+                  <ReferenceLine key={milestone} y={milestone}
+                    stroke={C.amber + "60"} strokeDasharray="4 4"
+                    label={{ value: `₱${milestone/1000000}M`, fill: C.amber, fontSize: 7, fontFamily: mono, position: "insideTopRight" }} />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display: "flex", gap: 20, marginTop: 10, flexWrap: "wrap" }}>
+            <Num label="Now" value={fmt(profile.netWorth)} color={C.cyan} small />
+            <Num label="1 Year" value={fmt(nwTrajectory[12]?.netWorth || 0)} color={C.text} small />
+            <Num label="2 Years" value={fmt(nwTrajectory[24]?.netWorth || 0)} color={C.text} small />
+            <Num label="3 Years" value={fmt(nwTrajectory[36]?.netWorth || 0)} color={C.green} small />
+          </div>
+        </Card>
+
+        {/* ── Savings & investment breakdown ── */}
+        <Card>
+          <Lbl icon="🏦">Savings & Investment Breakdown</Lbl>
+          <div style={{ width: "100%", height: 200 }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie data={savInvestBreakdown} cx="50%" cy="50%"
+                  innerRadius={50} outerRadius={80} paddingAngle={2}
+                  dataKey="value" stroke="none">
+                  {savInvestBreakdown.map((entry, i) => (
+                    <Cell key={i} fill={entry.color + (entry.color === C.green ? "cc" : "99")} />
+                  ))}
+                </Pie>
+                <Tooltip content={<TT />} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ marginTop: 4 }}>
+            {savInvestBreakdown.map((item, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Dot color={item.color} />
+                  <span style={{ fontFamily: body, fontSize: 11, color: C.text }}>{item.name}</span>
+                </div>
+                <span style={{ fontFamily: mono, fontSize: 11, color: item.color, fontWeight: 600 }}>{fmt(item.value)}</span>
               </div>
-              <div style={{ padding: "3px 10px", background: yearHit ? C.greenDim : C.amberDim, borderRadius: 6, border: `1px solid ${yearHit ? C.green : C.amber}20` }}>
-                <span style={{ fontFamily: mono, fontSize: 10, color: yearHit ? C.green : C.amber, fontWeight: 600 }}>
-                  {yearHit ? `Age ${yearHit.age}` : "35+ yrs"}
+            ))}
+          </div>
+          <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase" }}>Total / month</div>
+              <div style={{ fontFamily: head, fontSize: 18, fontWeight: 700, color: C.text }}>{fmt(totalSavInvest)}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase" }}>Of income</div>
+              <div style={{ fontFamily: head, fontSize: 18, fontWeight: 700, color: C.green }}>{savingsRate}%</div>
+            </div>
+          </div>
+        </Card>
+
+        {/* ── Budget utilisation by category ── */}
+        <Card>
+          <Lbl icon="🎯">Budget Utilisation by Category</Lbl>
+          {catUtil.map((row, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <Dot color={row.color} />
+                  <span style={{ fontFamily: body, fontSize: 11, color: C.text }}>{row.cat}</span>
+                </div>
+                <span style={{ fontFamily: mono, fontSize: 10, color: Number(row.pct) >= 90 ? C.rose : C.muted }}>
+                  {fmt(row.spent)} <span style={{ color: C.dim }}>/ {fmt(row.budgeted)}</span>
                 </span>
               </div>
+              <div style={{ height: 5, background: C.border, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%",
+                  width: `${row.pct}%`,
+                  background: Number(row.pct) >= 100 ? C.rose : Number(row.pct) >= 80 ? C.amber : row.color,
+                  borderRadius: 3,
+                  transition: "width 0.4s ease"
+                }} />
+              </div>
             </div>
-          );
-        })}
-      </Card>
-    </div>
-  );
+          ))}
+        </Card>
+
+        {/* ── Top spends this month ── */}
+        <Card>
+          <Lbl icon="🏆">Top Spends This Month</Lbl>
+          {topSubs.length === 0 ? (
+            <div style={{ fontFamily: body, fontSize: 12, color: C.dim, textAlign: "center", padding: 20 }}>No expenses logged yet</div>
+          ) : topSubs.map((item, i) => {
+            const over = item.budget > 0 && item.spent > item.budget;
+            const p = item.budget > 0 ? Math.min((item.spent / item.budget) * 100, 100) : 100;
+            return (
+              <div key={i} style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontFamily: mono, fontSize: 9, color: C.dim, minWidth: 14 }}>#{i+1}</span>
+                    <span style={{ fontFamily: body, fontSize: 12, color: over ? C.rose : C.text }}>{item.name}</span>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <span style={{ fontFamily: mono, fontSize: 11, color: over ? C.rose : C.cyan, fontWeight: 600 }}>{fmt(item.spent)}</span>
+                    {item.budget > 0 && <span style={{ fontFamily: mono, fontSize: 9, color: C.dim }}> / {fmt(item.budget)}</span>}
+                  </div>
+                </div>
+                {item.budget > 0 && (
+                  <div style={{ height: 4, background: C.border, borderRadius: 2, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${p}%`, background: over ? C.rose : C.cyan, borderRadius: 2 }} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </Card>
+
+        {/* ── Spending insight card ── */}
+        <Card style={{ gridColumn: "1 / -1", borderColor: C.cyan + "20" }}>
+          <Lbl icon="💡">Monthly Insights</Lbl>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+            {[
+              {
+                label: "Spending pace",
+                color: projectedMonthEnd > totalBudgetSpending ? C.rose : C.green,
+                text: projectedMonthEnd > totalBudgetSpending
+                  ? `At this rate you'll exceed your budget by ${fmt(projectedMonthEnd - totalBudgetSpending)} by month-end.`
+                  : `You're on track to finish ${fmt(totalBudgetSpending - projectedMonthEnd)} under budget. 🎉`
+              },
+              {
+                label: "Savings rate",
+                color: Number(savingsRate) >= 30 ? C.green : Number(savingsRate) >= 20 ? C.amber : C.rose,
+                text: Number(savingsRate) >= 30
+                  ? `${savingsRate}% savings rate — excellent. You're building wealth fast.`
+                  : Number(savingsRate) >= 20
+                  ? `${savingsRate}% savings rate — solid, but room to grow.`
+                  : `${savingsRate}% savings rate — consider trimming discretionary spend.`
+              },
+              {
+                label: "Net worth growth",
+                color: C.cyan,
+                text: `At current pace your net worth reaches ${fmt(nwTrajectory[12]?.netWorth || 0)} in 12 months — a ${fmt((nwTrajectory[12]?.netWorth || 0) - profile.netWorth)} increase.`
+              },
+            ].map((ins, i) => (
+              <div key={i} style={{ padding: "10px 14px", background: ins.color + "10", borderRadius: 8, border: `1px solid ${ins.color}20` }}>
+                <div style={{ fontFamily: mono, fontSize: 8, color: ins.color, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 5 }}>{ins.label}</div>
+                <div style={{ fontFamily: body, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{ins.text}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+      </div>
+    );
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: body }}>
@@ -1088,7 +1245,7 @@ export default function App() {
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <h1 style={{ fontFamily: head, fontSize: 22, fontWeight: 800, margin: 0, color: C.text }}>
-              <span style={{ color: C.cyan }}>₱</span> YOUHEI AND KAORI FUNDS DASHBOARD
+              <span style={{ color: C.cyan }}>₱</span> Kaori and Youhei Funds
             </h1>
             <span style={{ fontFamily: mono, fontSize: 8, color: C.dim, background: C.cyanDim, padding: "2px 6px", borderRadius: 4 }}>v7 LIVE</span>
           </div>
@@ -1111,7 +1268,7 @@ export default function App() {
         {tab === "Log" && renderLog()}
         {tab === "Budget" && renderBudget()}
         {tab === "Analytics" && renderAnalytics()}
-        {tab === "FIRE" && renderFire()}
+        {tab === "Goals" && renderGoals()}
       </div>
     </div>
   );
