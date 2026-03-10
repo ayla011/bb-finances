@@ -6,7 +6,7 @@ import {
   PieChart, Pie, Cell, ReferenceLine,
 } from "recharts";
 
-// ── CONFIG ────────────────────────────────────────────
+// ── CONFIG ───────────────────────────────────────────
 const SHEETS_CONNECTED_DEFAULT = false;
 
 // ── PALETTE ───────────────────────────────────────────
@@ -530,7 +530,8 @@ export default function App() {
     }
     if (dayOfMonth < daysInMonth) {
       const dailyAvg = totalSpent / dayOfMonth;
-      for (let d = dayOfMonth; d <= daysInMonth; d++) {
+      // start projecting from the next day (don't override today's actual value)
+      for (let d = dayOfMonth + 1; d <= daysInMonth; d++) {
         data[d - 1].projected = totalSpent + dailyAvg * (d - dayOfMonth);
       }
     }
@@ -572,8 +573,9 @@ export default function App() {
         total: Math.round(sav + inv),
         label: m % 12 === 0 ? `Y${m/12}` : ""
       });
-      sav += monthlySavings * (1 + 0.032 / 12);
-      inv += monthlyInvest * (1 + 0.065 / 12);
+      // compound existing pool, then add monthly contributions
+      sav = sav * (1 + 0.032 / 12) + monthlySavings;
+      inv = inv * (1 + 0.065 / 12) + monthlyInvest;
     }
     return data;
   }, [targets, profile.netWorth]);
@@ -1263,8 +1265,6 @@ export default function App() {
         </Card>
         )}
 
-                </Card>
-
         <Card style={{ gridColumn: "1 / -1" }}>
           <Lbl icon="📈">Net Worth Trajectory — 3 Years</Lbl>
           <div style={{ width: "100%", height: 240 }}>
@@ -1346,7 +1346,7 @@ export default function App() {
         <Card>
           <Lbl icon="🏆">Top Spends This Month</Lbl>
           {topSubs.length === 0 ? (
-            <div style={{ fontFamily: body, fontSize: 12, color: C.dim, textAlign: "center", padding: 20 }}>No expenses logged yet</div>
+            <div style={{ fontFamily: body, fontSize: 13, color: C.dim, textAlign: "center", padding: 20 }}>No expenses logged yet</div>
           ) : topSubs.map((item, i) => {
             const over = item.budget > 0 && item.spent > item.budget;
             const p = item.budget > 0 ? Math.min((item.spent/item.budget)*100, 100) : 100;
@@ -1521,7 +1521,7 @@ export default function App() {
                           style={{ padding: "3px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.dim, fontFamily: mono, fontSize: 9, cursor: "pointer" }}>✕</button>
                       </div>
                     </div>
-                    {/* Progress bar */}
+                    {/* Progress */}
                     <div style={{ height: 8, background: C.border, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
                       <div style={{ height: "100%", width: `${pctDone}%`, background: `linear-gradient(90deg, ${goal.color}99, ${goal.color})`, borderRadius: 4, transition: "width 0.5s ease" }} />
                     </div>
