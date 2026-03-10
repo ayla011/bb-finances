@@ -83,6 +83,17 @@ const dayOfMonth = today.getDate();
 const monthProgress = dayOfMonth / daysInMonth;
 const monthName = today.toLocaleString("default", { month: "long", year: "numeric" });
 
+// normalizeProfile: convert profile fields (strings) to numbers when read from Sheets
+const normalizeProfile = (p = {}) => ({
+  age: Number(p.age) || 0,
+  netWorth: Number(p.netWorth) || 0,
+  efFund: Number(p.efFund) || 0,
+  japanFund: Number(p.japanFund) || 0,
+  timeDeposit: Number(p.timeDeposit) || 0,
+  houseAndLotSaved: Number(p.houseAndLotSaved) || 0,
+  _row: p._row,
+});
+
 // ── COMPONENTS ────────────────────────────────────────
 const Dot = ({ color }) => <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: color, boxShadow: `0 0 8px ${color}60`, marginRight: 7, flexShrink: 0 }} />;
 
@@ -238,7 +249,7 @@ export default function App() {
         }
 
         if (Array.isArray(all.profile) && all.profile.length > 0) {
-          setProfile(all.profile[0]);
+          setProfile(normalizeProfile(all.profile[0]));
         }
 
         setSheetsConnected(true);
@@ -458,7 +469,7 @@ export default function App() {
 
       // FIX 2b: all.profile is an array — unwrap the first element
       if (Array.isArray(all.profile) && all.profile.length > 0) {
-        setProfile(all.profile[0]);
+        setProfile(normalizeProfile(all.profile[0]));
       }
 
       if (Array.isArray(all.expenses)) {
