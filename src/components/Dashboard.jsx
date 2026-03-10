@@ -73,7 +73,7 @@ const CAT_COLORS = {
   Personal: C.blue, Savings: C.green, Investment: C.indigo,
 };
 
-// ── HELPERS ───────────────────────────────────────────
+// ── HELPERS ─────────────────────────────────────────
 const fmt = (v) => `₱${Math.round(v).toLocaleString()}`;
 const fmtK = (v) => `₱${(v/1000).toFixed(v >= 10000 ? 0 : 1)}k`;
 const pct = (v, t) => t === 0 ? 0 : ((v / t) * 100).toFixed(1);
@@ -238,19 +238,9 @@ export default function App() {
         }
 
         if (Array.isArray(all.profile) && all.profile.length > 0) {
-          const p = all.profile[0];
-
-          setProfile({
-            ...p,
-            age: Number(p.age),
-            netWorth: Number(p.netWorth),
-            efFund: Number(p.efFund),
-            japanFund: Number(p.japanFund),
-            timeDeposit: Number(p.timeDeposit || 0),
-            houseAndLotSaved: Number(p.houseAndLotSaved || 0),
-            _row: p._row
-          });
+          setProfile(all.profile[0]);
         }
+
         setSheetsConnected(true);
 
       } catch (e) {
@@ -285,6 +275,16 @@ export default function App() {
   const [hlGoalVisible, setHlGoalVisible] = useState(true);
   const [hlEditingTarget, setHlEditingTarget] = useState(false);
   const [hlTargetInput, setHlTargetInput] = useState("2250000");
+
+  // ── Self-Loans (big purchase repayment tracker) ───────
+  const LOAN_SOURCES = ["Personal (Wife)", "Personal (Husband)", "House & Lot Fund", "EF Fund", "Japan Fund", "Other"];
+  const [selfLoans, setSelfLoans] = useState([]);
+  const [showLoanForm, setShowLoanForm] = useState(false);
+  const [editingLoan, setEditingLoan] = useState(null);
+  const [loanForm, setLoanForm] = useState({ name: "", amount: "", source: "Personal (Wife)", monthlyPlan: "", note: "" });
+  const [showRepayForm, setShowRepayForm] = useState(null); // loan id
+  const [repayAmount, setRepayAmount] = useState("");
+  const [repayDate, setRepayDate] = useState(today.toISOString().slice(0, 10));
 
   // ── Sync: when a savings goal is added with no matching budget target, auto-create one ──
   useEffect(() => {
@@ -325,8 +325,8 @@ export default function App() {
       <span
         onClick={() => { setEditingField(id); setEditValue(String(value)); }}
         style={{ fontFamily: mono, fontSize, color: color || C.muted, fontWeight, cursor: "pointer", padding: "1px 4px", borderRadius: 4, borderBottom: `1px dashed ${C.dim}40`, transition: "background 0.15s" }}
-        onMouseEnter={e => { if (e && e.currentTarget) e.currentTarget.style.background = C.border; }}
-        onMouseLeave={e => { if (e && e.currentTarget) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={e => e.target.style.background = C.border}
+        onMouseLeave={e => e.target.style.background = "transparent"}
         title="Click to edit"
       >
         {prefix}{Math.round(value).toLocaleString()}
@@ -356,8 +356,8 @@ export default function App() {
       <span
         onClick={() => { setEditingField(id); setEditValue(String(value)); }}
         style={{ fontFamily: mono, fontSize, color: color || C.muted, fontWeight, cursor: "pointer", padding: "1px 4px", borderRadius: 4, borderBottom: `1px dashed ${C.dim}40`, transition: "background 0.15s" }}
-        onMouseEnter={e => { if (e && e.currentTarget) e.currentTarget.style.background = C.border; }}
-        onMouseLeave={e => { if (e && e.currentTarget) e.currentTarget.style.background = "transparent"; }}
+        onMouseEnter={e => e.target.style.background = C.border}
+        onMouseLeave={e => e.target.style.background = "transparent"}
         title="Click to edit"
       >
         {value}{suffix}
@@ -414,12 +414,14 @@ export default function App() {
 
       if (sheetsConnected) {
         if (current._row != null) {
-          // Profile columns: age | netWorth | efFund | japanFund
+          // Profile columns: age | netWorth | efFund | japanFund | timeDeposit | houseAndLotSaved
           await sheetsApi.updateRow("Profile", current._row, [
             next.age,
             next.netWorth,
             next.efFund,
             next.japanFund,
+            next.timeDeposit || 0,
+            next.houseAndLotSaved || 0,
           ]);
         }
       }
@@ -460,11 +462,7 @@ export default function App() {
       }
 
       if (Array.isArray(all.expenses)) {
-        setExpenses(all.expenses.map(e => ({
-          ...e,
-          amount: Number(e.amount),
-          _row: e._row
-        })));
+        setExpenses(all.expenses.map(e => ({ ...e, amount: Number(e.amount), _row: e._row })));
       }
 
     } catch (err) {
@@ -581,7 +579,7 @@ export default function App() {
   }, [targets, profile.netWorth]);
 
 
-  // ── FIX 5: handleLog resets form after submission ────────────────────────
+  // ── FIX 5: handleLog resets form after submission ───────────────────────
   // ── FIX 4: resolves actual subcategory from customSub when "__custom" ────
   const handleLog = async () => {
     const resolvedSub = formSub === "__custom" ? customSub.trim() : formSub;
@@ -1140,9 +1138,9 @@ export default function App() {
         <Card style={{ gridColumn: "1 / -1", borderColor: C.teal + "40" }}>
           <Lbl icon="🏦">Total Bank Balance</Lbl>
           {(() => {
-            const ef = Number(profile.efFund) || 0;
-            const jp = Number(profile.japanFund) || 0;
-            const logged = Number(allTimeSavingsLogged) || 0;
+            const ef = profile.efFund || 0;
+            const jp = profile.japanFund || 0;
+            const logged = allTimeSavingsLogged;
             const total = ef + jp + logged;
             const efPct = total > 0 ? (ef / total) * 100 : 0;
             const jpPct = total > 0 ? (jp / total) * 100 : 0;
@@ -1264,6 +1262,8 @@ export default function App() {
           </div>
         </Card>
         )}
+
+                </Card>
 
         <Card style={{ gridColumn: "1 / -1" }}>
           <Lbl icon="📈">Net Worth Trajectory — 3 Years</Lbl>
@@ -1554,6 +1554,170 @@ export default function App() {
           )}
         </Card>
 
+        {/* ── Self-Loan / Big Purchase Tracker ── */}
+        <Card style={{ gridColumn: "1 / -1", borderColor: C.rose + "30" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span style={{ fontSize: 14 }}>💸</span>
+              <span style={{ fontFamily: mono, fontSize: 9, fontWeight: 600, letterSpacing: "0.14em", textTransform: "uppercase", color: C.muted }}>Self-Loans — Big Purchase Payback</span>
+            </div>
+            <button onClick={() => { setEditingLoan(null); setLoanForm({ name: "", amount: "", source: "Personal (Wife)", monthlyPlan: "", note: "" }); setShowLoanForm(true); }}
+              style={{ padding: "5px 12px", background: `linear-gradient(135deg, ${C.rose}, ${C.purple})`, border: "none", borderRadius: 6, color: "#fff", fontFamily: mono, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>
+              + Add Purchase
+            </button>
+          </div>
+
+          {/* Add / Edit form */}
+          {showLoanForm && (
+            <div style={{ background: C.cardAlt, border: `1px solid ${C.rose}30`, borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+              <div style={{ fontFamily: mono, fontSize: 8, color: C.rose, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                {editingLoan ? "Edit Purchase" : "New Big Purchase"}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8, marginBottom: 10 }}>
+                <div>
+                  <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>What was it?</label>
+                  <input value={loanForm.name} onChange={e => setLoanForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Laptop, Appliance"
+                    style={{ width: "100%", padding: "7px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", marginTop: 3 }} />
+                </div>
+                <div>
+                  <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Total Amount (₱)</label>
+                  <input type="number" value={loanForm.amount} onChange={e => setLoanForm(p => ({ ...p, amount: e.target.value }))} placeholder="0"
+                    style={{ width: "100%", padding: "7px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", marginTop: 3 }} />
+                </div>
+                <div>
+                  <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Sourced From</label>
+                  <select value={loanForm.source} onChange={e => setLoanForm(p => ({ ...p, source: e.target.value }))}
+                    style={{ width: "100%", padding: "7px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", marginTop: 3 }}>
+                    {LOAN_SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Monthly Repayment Plan (₱)</label>
+                  <input type="number" value={loanForm.monthlyPlan} onChange={e => setLoanForm(p => ({ ...p, monthlyPlan: e.target.value }))} placeholder="0"
+                    style={{ width: "100%", padding: "7px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", marginTop: 3 }} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", letterSpacing: "0.1em" }}>Note (optional)</label>
+                  <input value={loanForm.note} onChange={e => setLoanForm(p => ({ ...p, note: e.target.value }))} placeholder="Any context..."
+                    style={{ width: "100%", padding: "7px 10px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text, fontFamily: body, fontSize: 13, outline: "none", marginTop: 3 }} />
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => {
+                  if (!loanForm.name || !loanForm.amount) return;
+                  const entry = { id: editingLoan || Date.now(), name: loanForm.name, amount: parseFloat(loanForm.amount), source: loanForm.source, monthlyPlan: parseFloat(loanForm.monthlyPlan) || 0, note: loanForm.note, repayments: editingLoan ? selfLoans.find(l => l.id === editingLoan)?.repayments || [] : [], createdAt: editingLoan ? selfLoans.find(l => l.id === editingLoan)?.createdAt : today.toISOString().slice(0,10) };
+                  setSelfLoans(prev => editingLoan ? prev.map(l => l.id === editingLoan ? entry : l) : [...prev, entry]);
+                  setShowLoanForm(false); setEditingLoan(null);
+                }} style={{ padding: "7px 16px", background: `linear-gradient(135deg, ${C.rose}, ${C.purple})`, border: "none", borderRadius: 6, color: "#fff", fontFamily: mono, fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                  {editingLoan ? "Save Changes" : "Add"}
+                </button>
+                <button onClick={() => { setShowLoanForm(false); setEditingLoan(null); }}
+                  style={{ padding: "7px 16px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 6, color: C.dim, fontFamily: mono, fontSize: 10, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {selfLoans.length === 0 ? (
+            <div style={{ fontFamily: body, fontSize: 13, color: C.dim, textAlign: "center", padding: "24px 0" }}>No self-loans yet — log a big purchase to track payback 💸</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
+              {selfLoans.map(loan => {
+                const totalRepaid = loan.repayments.reduce((s, r) => s + r.amount, 0);
+                const remaining = Math.max(loan.amount - totalRepaid, 0);
+                const pctDone = Math.min(loan.amount > 0 ? (totalRepaid / loan.amount) * 100 : 0, 100);
+                const monthsLeft = loan.monthlyPlan > 0 ? Math.ceil(remaining / loan.monthlyPlan) : null;
+                const eta = monthsLeft != null ? (monthsLeft >= 12 ? `${Math.floor(monthsLeft/12)}y ${monthsLeft%12}m` : `${monthsLeft}m`) : "—";
+                const done = remaining === 0;
+                return (
+                  <div key={loan.id} style={{ padding: "14px 16px", background: C.cardAlt, borderRadius: 10, border: `1px solid ${done ? C.green : C.rose}25` }}>
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 16 }}>{done ? "✅" : "💸"}</span>
+                          <span style={{ fontFamily: head, fontSize: 14, fontWeight: 700, color: done ? C.green : C.text }}>{loan.name}</span>
+                        </div>
+                        <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, marginTop: 2 }}>from {loan.source} · {loan.createdAt}</div>
+                        {loan.note && <div style={{ fontFamily: body, fontSize: 11, color: C.muted, marginTop: 2, fontStyle: "italic" }}>{loan.note}</div>}
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={() => { setEditingLoan(loan.id); setLoanForm({ name: loan.name, amount: String(loan.amount), source: loan.source, monthlyPlan: String(loan.monthlyPlan), note: loan.note }); setShowLoanForm(true); }}
+                          style={{ padding: "3px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.dim, fontFamily: mono, fontSize: 9, cursor: "pointer" }}>Edit</button>
+                        <button onClick={() => setSelfLoans(prev => prev.filter(l => l.id !== loan.id))}
+                          style={{ padding: "3px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.dim, fontFamily: mono, fontSize: 9, cursor: "pointer" }}>✕</button>
+                      </div>
+                    </div>
+
+                    {/* Progress */}
+                    <div style={{ height: 8, background: C.border, borderRadius: 4, overflow: "hidden", marginBottom: 5 }}>
+                      <div style={{ height: "100%", width: `${pctDone}%`, background: done ? `linear-gradient(90deg, ${C.green}99, ${C.green})` : `linear-gradient(90deg, ${C.rose}99, ${C.purple})`, borderRadius: 4, transition: "width 0.5s ease" }} />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                      <span style={{ fontFamily: mono, fontSize: 9, color: done ? C.green : C.rose, fontWeight: 600 }}>{pctDone.toFixed(1)}% paid back</span>
+                      <span style={{ fontFamily: mono, fontSize: 9, color: C.dim }}>{fmt(remaining)} left</span>
+                    </div>
+
+                    {/* Stats */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 10 }}>
+                      {[
+                        { label: "Total", value: fmt(loan.amount), color: C.text },
+                        { label: "Repaid", value: fmt(totalRepaid), color: C.green },
+                        { label: done ? "Done!" : `ETA (${fmt(loan.monthlyPlan)}/mo)`, value: done ? "🎉" : eta, color: done ? C.green : C.cyan },
+                      ].map((s, i) => (
+                        <div key={i} style={{ padding: "6px 8px", background: C.card, borderRadius: 6, textAlign: "center" }}>
+                          <div style={{ fontFamily: mono, fontSize: 7, color: C.dim, textTransform: "uppercase", marginBottom: 2 }}>{s.label}</div>
+                          <div style={{ fontFamily: mono, fontSize: 10, color: s.color, fontWeight: 700 }}>{s.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Repayment log */}
+                    {loan.repayments.length > 0 && (
+                      <div style={{ marginBottom: 8, maxHeight: 80, overflowY: "auto" }}>
+                        {[...loan.repayments].reverse().map((r, i) => (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: `1px solid ${C.border}` }}>
+                            <span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>{r.date}</span>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                              <span style={{ fontFamily: mono, fontSize: 9, color: C.green, fontWeight: 600 }}>{fmt(r.amount)}</span>
+                              <button onClick={() => setSelfLoans(prev => prev.map(l => l.id === loan.id ? { ...l, repayments: l.repayments.filter((_, ri) => ri !== (l.repayments.length - 1 - i)) } : l))}
+                                style={{ padding: "1px 5px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.dim, fontFamily: mono, fontSize: 8, cursor: "pointer" }}>✕</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Log repayment */}
+                    {!done && (
+                      showRepayForm === loan.id ? (
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+                          <input type="date" value={repayDate} onChange={e => setRepayDate(e.target.value)}
+                            style={{ padding: "5px 8px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: mono, fontSize: 10, outline: "none", width: 130 }} />
+                          <input type="number" value={repayAmount} onChange={e => setRepayAmount(e.target.value)} placeholder="Amount"
+                            style={{ padding: "5px 8px", background: C.card, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: body, fontSize: 12, outline: "none", width: 90 }} />
+                          <button onClick={() => {
+                            const amt = parseFloat(repayAmount);
+                            if (!amt || amt <= 0) return;
+                            setSelfLoans(prev => prev.map(l => l.id === loan.id ? { ...l, repayments: [...l.repayments, { date: repayDate, amount: amt }] } : l));
+                            setRepayAmount(""); setShowRepayForm(null);
+                          }} style={{ padding: "5px 10px", background: C.green, border: "none", borderRadius: 5, color: "#000", fontFamily: mono, fontSize: 9, fontWeight: 700, cursor: "pointer" }}>✓</button>
+                          <button onClick={() => setShowRepayForm(null)}
+                            style={{ padding: "5px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 5, color: C.dim, fontFamily: mono, fontSize: 9, cursor: "pointer" }}>✕</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setShowRepayForm(loan.id); setRepayAmount(String(loan.monthlyPlan || "")); setRepayDate(today.toISOString().slice(0,10)); }}
+                          style={{ width: "100%", padding: "6px", background: "transparent", border: `1px dashed ${C.rose}50`, borderRadius: 6, color: C.rose, fontFamily: mono, fontSize: 9, cursor: "pointer", marginTop: 2 }}>
+                          + Log Repayment
+                        </button>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
       </div>
     );
   };
@@ -1566,7 +1730,7 @@ export default function App() {
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <h1 style={{ fontFamily: head, fontSize: 22, fontWeight: 800, margin: 0, color: C.text }}>
-              <span style={{ color: C.cyan }}>₱</span> Command Center
+              <span style={{ color: C.cyan }}>₱</span> Youhei and Kaori Funds
             </h1>
             <span style={{ fontFamily: mono, fontSize: 8, color: C.dim, background: C.cyanDim, padding: "2px 6px", borderRadius: 4 }}>v7 LIVE</span>
           </div>
