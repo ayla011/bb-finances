@@ -1543,7 +1543,7 @@ export default function App() {
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <h1 style={{ fontFamily: head, fontSize: 22, fontWeight: 800, margin: 0, color: C.text }}>
-              <span style={{ color: C.cyan }}>₱</span> Command Center
+              <span style={{ color: C.cyan }}>₱</span> Kaori and Youhei Funds
             </h1>
             <span style={{ fontFamily: mono, fontSize: 8, color: C.dim, background: C.cyanDim, padding: "2px 6px", borderRadius: 4 }}>v7 LIVE</span>
           </div>
