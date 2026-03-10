@@ -135,7 +135,7 @@ const TT = ({ active, payload, label }) => {
   );
 };
 
-// ── API (via Next.js API route) ───────────────────────
+// ── API (via Next.js API route) ─────────────────────
 const sheetsApi = {
   async fetchAll() {
     try {
@@ -238,9 +238,19 @@ export default function App() {
         }
 
         if (Array.isArray(all.profile) && all.profile.length > 0) {
-          setProfile(all.profile[0]);
-        }
+          const p = all.profile[0];
 
+          setProfile({
+            ...p,
+            age: Number(p.age),
+            netWorth: Number(p.netWorth),
+            efFund: Number(p.efFund),
+            japanFund: Number(p.japanFund),
+            timeDeposit: Number(p.timeDeposit || 0),
+            houseAndLotSaved: Number(p.houseAndLotSaved || 0),
+            _row: p._row
+          });
+        }
         setSheetsConnected(true);
 
       } catch (e) {
@@ -315,8 +325,8 @@ export default function App() {
       <span
         onClick={() => { setEditingField(id); setEditValue(String(value)); }}
         style={{ fontFamily: mono, fontSize, color: color || C.muted, fontWeight, cursor: "pointer", padding: "1px 4px", borderRadius: 4, borderBottom: `1px dashed ${C.dim}40`, transition: "background 0.15s" }}
-        onMouseEnter={e => e.target.style.background = C.border}
-        onMouseLeave={e => e.target.style.background = "transparent"}
+        onMouseEnter={e => { if (e && e.currentTarget) e.currentTarget.style.background = C.border; }}
+        onMouseLeave={e => { if (e && e.currentTarget) e.currentTarget.style.background = "transparent"; }}
         title="Click to edit"
       >
         {prefix}{Math.round(value).toLocaleString()}
@@ -346,8 +356,8 @@ export default function App() {
       <span
         onClick={() => { setEditingField(id); setEditValue(String(value)); }}
         style={{ fontFamily: mono, fontSize, color: color || C.muted, fontWeight, cursor: "pointer", padding: "1px 4px", borderRadius: 4, borderBottom: `1px dashed ${C.dim}40`, transition: "background 0.15s" }}
-        onMouseEnter={e => e.target.style.background = C.border}
-        onMouseLeave={e => e.target.style.background = "transparent"}
+        onMouseEnter={e => { if (e && e.currentTarget) e.currentTarget.style.background = C.border; }}
+        onMouseLeave={e => { if (e && e.currentTarget) e.currentTarget.style.background = "transparent"; }}
         title="Click to edit"
       >
         {value}{suffix}
@@ -1129,42 +1139,55 @@ export default function App() {
 
         <Card style={{ gridColumn: "1 / -1", borderColor: C.teal + "40" }}>
           <Lbl icon="🏦">Total Bank Balance</Lbl>
-          <div style={{ display: "flex", gap: 32, flexWrap: "wrap", alignItems: "flex-end" }}>
-            <div>
-              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Emergency Fund</div>
-              <div style={{ fontFamily: head, fontSize: 22, fontWeight: 700, color: C.green }}>{fmt(profile.efFund || 0)}</div>
-            </div>
-            <div style={{ fontFamily: head, fontSize: 20, color: C.dim, paddingBottom: 2 }}>+</div>
-            <div>
-              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Japan Fund</div>
-              <div style={{ fontFamily: head, fontSize: 22, fontWeight: 700, color: C.cyan }}>{fmt(profile.japanFund || 0)}</div>
-            </div>
-            <div style={{ fontFamily: head, fontSize: 20, color: C.dim, paddingBottom: 2 }}>+</div>
-            <div>
-              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Savings Logged</div>
-              <div style={{ fontFamily: head, fontSize: 22, fontWeight: 700, color: C.teal }}>{fmt(allTimeSavingsLogged)}</div>
-              <div style={{ fontFamily: mono, fontSize: 7, color: C.dim, marginTop: 2 }}>all-time from log</div>
-            </div>
-            <div style={{ fontFamily: head, fontSize: 20, color: C.dim, paddingBottom: 2 }}>=</div>
-            <div>
-              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Total Bank Balance</div>
-              <div style={{ fontFamily: head, fontSize: 28, fontWeight: 800, color: C.text }}>{fmt(totalBankBalance)}</div>
-            </div>
-            <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>As % of net worth</div>
-              <div style={{ fontFamily: head, fontSize: 18, fontWeight: 700, color: C.muted }}>{profile.netWorth > 0 ? ((totalBankBalance/profile.netWorth)*100).toFixed(1) : 0}%</div>
-            </div>
-          </div>
-          <div style={{ marginTop: 12, height: 6, background: C.border, borderRadius: 3, overflow: "hidden", display: "flex" }}>
-            <div style={{ flex: profile.efFund || 0, background: C.green }} />
-            <div style={{ flex: profile.japanFund || 0, background: C.cyan }} />
-            <div style={{ flex: allTimeSavingsLogged || 0, background: C.teal }} />
-          </div>
-          <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.green} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Emergency Fund</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.cyan} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Japan Fund</span></div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.teal} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Savings Logged</span></div>
-          </div>
+          {(() => {
+            const ef = Number(profile.efFund) || 0;
+            const jp = Number(profile.japanFund) || 0;
+            const logged = Number(allTimeSavingsLogged) || 0;
+            const total = ef + jp + logged;
+            const efPct = total > 0 ? (ef / total) * 100 : 0;
+            const jpPct = total > 0 ? (jp / total) * 100 : 0;
+            const logPct = total > 0 ? (logged / total) * 100 : 0;
+            return (
+              <>
+                <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div>
+                    <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>EF Fund</div>
+                    <div style={{ fontFamily: head, fontSize: 20, fontWeight: 700, color: C.green }}>{fmt(ef)}</div>
+                  </div>
+                  <div style={{ fontFamily: head, fontSize: 18, color: C.dim, paddingBottom: 2 }}>+</div>
+                  <div>
+                    <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Japan Fund</div>
+                    <div style={{ fontFamily: head, fontSize: 20, fontWeight: 700, color: C.cyan }}>{fmt(jp)}</div>
+                  </div>
+                  <div style={{ fontFamily: head, fontSize: 18, color: C.dim, paddingBottom: 2 }}>+</div>
+                  <div>
+                    <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Savings Transferred</div>
+                    <div style={{ fontFamily: head, fontSize: 20, fontWeight: 700, color: C.teal }}>{fmt(logged)}</div>
+                    <div style={{ fontFamily: mono, fontSize: 7, color: C.dim, marginTop: 1 }}>from expense log</div>
+                  </div>
+                  <div style={{ fontFamily: head, fontSize: 18, color: C.dim, paddingBottom: 2 }}>=</div>
+                  <div>
+                    <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>Total on Hand</div>
+                    <div style={{ fontFamily: head, fontSize: 28, fontWeight: 800, color: C.text }}>{fmt(total)}</div>
+                  </div>
+                  <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                    <div style={{ fontFamily: mono, fontSize: 8, color: C.dim, textTransform: "uppercase", marginBottom: 3 }}>As % of net worth</div>
+                    <div style={{ fontFamily: head, fontSize: 18, fontWeight: 700, color: C.muted }}>{profile.netWorth > 0 ? ((total / profile.netWorth) * 100).toFixed(1) : 0}%</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 12, height: 6, background: C.border, borderRadius: 3, overflow: "hidden", display: "flex" }}>
+                  <div style={{ width: `${efPct}%`, background: C.green }} />
+                  <div style={{ width: `${jpPct}%`, background: C.cyan }} />
+                  <div style={{ width: `${logPct}%`, background: C.teal }} />
+                </div>
+                <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.green} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>EF Fund ({efPct.toFixed(0)}%)</span></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.cyan} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Japan Fund ({jpPct.toFixed(0)}%)</span></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}><Dot color={C.teal} /><span style={{ fontFamily: mono, fontSize: 8, color: C.dim }}>Savings Transferred ({logPct.toFixed(0)}%)</span></div>
+                </div>
+              </>
+            );
+          })()}
         </Card>
 
 {hlGoalVisible && (
@@ -1543,7 +1566,7 @@ export default function App() {
         <div style={{ marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <h1 style={{ fontFamily: head, fontSize: 22, fontWeight: 800, margin: 0, color: C.text }}>
-              <span style={{ color: C.cyan }}>₱</span> Kaori and Youhei Funds
+              <span style={{ color: C.cyan }}>₱</span> Command Center
             </h1>
             <span style={{ fontFamily: mono, fontSize: 8, color: C.dim, background: C.cyanDim, padding: "2px 6px", borderRadius: 4 }}>v7 LIVE</span>
           </div>
